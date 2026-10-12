@@ -1,0 +1,46 @@
+name: site - publish the MCQ reader on GitHub Pages
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get the question data from the latest release (site_data.zip)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download --repo "$GITHUB_REPOSITORY" --pattern "site_data.zip" --dir .
+          mkdir -p site/data
+          unzip -q site_data.zip -d site/data
+          echo "files in site/data:"; find site/data -type f | wc -l; du -sh site
+
+      - name: Point the images at IMG_BASE (skipped if the variable is empty)
+        if: ${{ vars.IMG_BASE != '' }}
+        run: python tools/set_image_base.py --dir site/data --base "${{ vars.IMG_BASE }}"
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

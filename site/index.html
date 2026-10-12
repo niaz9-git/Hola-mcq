@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="bn">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MCQ data check</title>
+<script src="config.js"></script>
+<body style="font-family:system-ui,sans-serif;max-width:760px;margin:1rem auto;padding:0 1rem">
+<h1>Data check</h1>
+<p>This temporary page only proves the data and images are being served. The real reader replaces it.</p>
+<pre id="out">loading...</pre>
+<div id="q"></div>
+<script>
+const base = (window.MCQ_CONFIG || {}).IMG_BASE || "";
+const fix = s => (s || "").split("{{IMG}}").join(base);
+(async () => {
+  const out = document.getElementById("out");
+  try {
+    const meta = await (await fetch("data/meta.json")).json();
+    const tree = await (await fetch("data/tree.json")).json();
+    out.textContent = meta.questions + " questions in " + meta.chunks + " chunks, " + meta.tags +
+      " tags (built " + meta.built + ")\nTop-level topics: " + tree.roots.length;
+    for (let i = 0; i < Math.min(meta.chunks, 40); i++) {
+      const chunk = await (await fetch("data/q/" + i + ".json")).json();
+      const hit = chunk.find(x => JSON.stringify(x).indexOf("{{IMG}}") >= 0 || JSON.stringify(x).indexOf("<img") >= 0);
+      if (hit) {
+        document.getElementById("q").innerHTML =
+          "<h3>First question with an image (chunk " + i + ")</h3>" + fix(hit.q) + "<hr>" + fix(hit.e || "");
+        return;
+      }
+    }
+    out.textContent += "\nNo image found in the first 40 chunks.";
+  } catch (e) { out.textContent = "Failed: " + e; }
+})();
+</script>
+</body>
+</html>
