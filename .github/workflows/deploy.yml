@@ -1,0 +1,49 @@
+name: deploy - publish the whole site (reader + questions + images) to Cloudflare Pages
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ github.token }}
+      DATA_TAG: ${{ vars.DATA_TAG || 'data' }}
+      IMAGES_TAG: ${{ vars.IMAGES_TAG || 'images' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble the site folder
+        run: |
+          mkdir -p publish/data dl
+          cp -r site/. publish/
+          gh release download "$DATA_TAG" --repo "$GITHUB_REPOSITORY" --pattern "site_data.zip" --dir dl
+          rm -rf publish/data && mkdir -p publish/data
+          unzip -q dl/site_data.zip -d publish/data
+          gh release download "$IMAGES_TAG" --repo "$GITHUB_REPOSITORY" --pattern "images-*.zip" --dir dl || echo "no image zips found"
+          for z in dl/images-*.zip; do [ -f "$z" ] && unzip -q "$z" -d publish; done
+          printf '/img/*\n  Cache-Control: public, max-age=31536000, immutable\n/sw.js\n  Cache-Control: no-cache\n/index.html\n  Cache-Control: no-cache\n' > publish/_headers
+          n=$(find publish -type f | wc -l)
+          echo "files to publish: $n"; du -sh publish
+          if [ "$n" -gt 19500 ]; then echo "Too many files for the free Cloudflare Pages limit (20,000)"; exit 1; fi
+
+      - name: Create the Cloudflare Pages project (ignored if it already exists)
+        continue-on-error: true
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages project create ${{ vars.CF_PROJECT }} --production-branch=main
+
+      - name: Publish
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy publish --project-name=${{ vars.CF_PROJECT }} --branch=main

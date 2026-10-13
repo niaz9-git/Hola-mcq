@@ -1,0 +1,55 @@
+name: images - download all images once and keep them in a release
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Trial run: download only this many images (0 = all)"
+        default: "0"
+      tag:
+        description: "Release tag that stores the image zips"
+        default: "images"
+
+permissions:
+  contents: write
+
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restore images already stored in the release (so only new ones are downloaded)
+        continue-on-error: true
+        run: |
+          mkdir -p out dl
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "images-*.zip" --pattern "image_map.json" --dir dl
+          for z in dl/images-*.zip; do unzip -qn "$z" -d out; done
+          cp dl/image_map.json out/image_map.json
+
+      - name: Download the images (no login token is used here)
+        run: |
+          pip install requests
+          python tools/download_images.py --urls data/image_urls.json --allow all --workers 8 --limit "${{ inputs.limit }}" --out out
+          echo "images on disk:"; find out/img -type f | wc -l; du -sh out/img
+
+      - name: Pack into zips (each far below the 2 GiB release-file limit) and upload
+        if: ${{ inputs.limit == '0' }}
+        run: |
+          cd out
+          zip -qr ../images-1.zip img/0 img/1 img/2 img/3
+          zip -qr ../images-2.zip img/4 img/5 img/6 img/7
+          zip -qr ../images-3.zip img/8 img/9 img/a img/b
+          zip -qr ../images-4.zip img/c img/d img/e img/f
+          cd ..
+          ls -lh images-*.zip
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "$TAG" --notes "Copies of the question images (zips) and image_map.json"
+          gh release upload "$TAG" images-*.zip out/image_map.json out/image_failed.json --clobber
