@@ -4,7 +4,7 @@ window.MCQ_CONFIG = {
   // Example: IMG_BASE: "https://my-images.pages.dev/"
   IMG_BASE: "",
   // Name shown at the top of the page.
-  TITLE: "MCQ Reader",
+  TITLE: "টপিক গুরু",
   // Where data/ is (folder with meta.json, tree.json, ids.json, q/, t/).
   DATA_BASE: "data/",
   // Questions shown per load.
